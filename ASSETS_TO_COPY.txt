@@ -1,0 +1,23 @@
+The following asset folders/files should be copied from the original workspace (/home/sina/ARVRContent/Projects/VR Tour) into this new repo.
+
+Run these commands from a shell to copy them (they preserve file contents):
+
+# Copy panoramas and images
+cp -r ../VR\ Tour/images/ ./images/
+
+# Copy sounds
+cp -r ../VR\ Tour/Sounds/ ./Sounds/
+
+# Copy videos (may be large)
+cp -r ../VR\ Tour/Videos/ ./Videos/
+
+# Copy 3D models
+cp -r ../VR\ Tour/3DModels/ ./3DModels/
+
+# Copy local A-Frame build
+cp ../VR\ Tour/aframe/aframe-v1.7.1.min.js ./aframe/
+
+Notes:
+- Paths above assume you run the commands from /home/sina/ARVRContent/Projects/VRExposureTherapy and the original project is at ../VR Tour.
+- If filenames contain spaces (e.g. some video files), the provided cp -r will still work because paths are quoted; adjust as needed.
+- After copying, verify `phobia.html` asset references (ids in <a-assets>) match the file names in `images/`, `Videos/`, `Sounds/`, and `3DModels/`.

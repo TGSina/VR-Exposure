@@ -1,0 +1,2 @@
+# No Python dependencies beyond stdlib required for serve.py
+# If you plan to use ngrok programmatically, install the ngrok client separately.
