@@ -2,547 +2,541 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>VR Tour — Phobia Simulator (Home + Scenes)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>VR Exposure Therapy — Template</title>
   <script src="aframe/aframe-v1.7.1.min.js"></script>
   <style>
-    html, body { height: 100%; margin: 0; background: #000; }
-    #help-top { position: fixed; left: 12px; top: 12px; z-index: 99998; color: #fff; font-size: 13px; background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
-    #audio-permission-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 99999; background: rgba(0,0,0,0.45); visibility: hidden; opacity: 0; transition: opacity 220ms, visibility 220ms; }
-    #audio-permission-overlay.show { visibility: visible; opacity: 1; }
-    #audio-permission-btn { background: #1976d2; color: white; border: none; padding: 14px 18px; font-size: 16px; border-radius: 8px; cursor: pointer; }
+    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
+    #help-top {
+      position: fixed; left: 10px; top: 10px; z-index: 99998;
+      color: #fff; font-size: 12px; line-height: 1.4; max-width: 260px;
+      background: rgba(0,0,0,0.45); padding: 8px 10px; border-radius: 6px;
+      pointer-events: none; font-family: system-ui, sans-serif;
+    }
+    #scene-label {
+      position: fixed; right: 10px; top: 10px; z-index: 99998;
+      color: #fff; font-size: 12px; background: rgba(0,0,0,0.45);
+      padding: 6px 10px; border-radius: 6px; pointer-events: none;
+      font-family: system-ui, sans-serif;
+    }
   </style>
 </head>
 <body>
-  <div id="help-top">Mouse, touch, or gaze can trigger each button. The side buttons are placed near the lower corners of the scene.</div>
-
-  <div id="audio-permission-overlay" aria-hidden="true">
-    <div style="text-align:center;">
-      <button id="audio-permission-btn">Tap to enable audio</button>
-      <div style="color:#fff; font-size:14px; margin-top:10px;">Tap once to unmute the tour.</div>
-    </div>
+  <div id="help-top">
+    Desktop: click a button. Phone: tap a button.<br />
+    VR headset (no controller): look at a button and hold your gaze
+    &mdash; a ring fills up, then it activates.
   </div>
+  <div id="scene-label"></div>
+
+  <!--
+    NOTE ON HARDWARE VOLUME BUTTONS:
+    Regular mobile browsers do NOT expose phone hardware volume-button
+    presses to web pages (the OS intercepts them for system volume, and
+    browsers do this deliberately for security/UX reasons). There is no
+    reliable, standards-based way to wire "phone volume button" -> "in-VR
+    action" from a normal web page. Gaze-dwell selection (implemented
+    below) is the standard, working substitute for a Cardboard-style
+    headset that has no controller and no reachable touchscreen once the
+    phone is inside the viewer. See docs/DEVELOPER.md for more detail
+    and for an optional, best-effort experimental hook you can enable.
+  -->
 
   <a-scene embedded>
-    <a-assets>
-      <img id="Partition1" src="Images/Ampleben_Sternenhimmel_Panorama.jpg" />
-      <img id="Partition2" src="Images/3840px-Befreiungshalle_Kelheim_Panorama.jpg" />
-      <img id="Partition3" src="Images/Partition3.jpg" />
-      <img id="Partition4" src="Images/Partition4.jpg" />
-      <img id="Partition5" src="Images/Partition5.jpg" />
-      <img id="AcroEnv1" src="Images/3840px-Gablenz_Kromlau_Aerial_Pan360.jpg" />
-      <img id="AcroEnv2" src="Images/3840px-HUSUM_HAFEN_Abend_02_Panorama.jpg" />
-      <video id="AcroEnv3Video" src="Videos/FALLING FROM BUILDING in 360° VR [ZZyBG6UsvoQ].mp4" crossorigin="anonymous" preload="auto" playsinline webkit-playsinline loop="true"></video>
+    <a-assets timeout="10000">
+      <!--
+        TEMPLATE ASSETS ONLY.
+        Every scene in this template currently points at these two
+        placeholder files:
+          Images/sample.jpg   -> equirectangular / 360 photo placeholder
+          Videos/sample.mp4   -> equirectangular / 360 video placeholder
+        Put your real 360 images/videos in the Images/ and Videos/
+        folders next to this file, then give each PHOBIAS.*.mild /
+        .harsh / CALM_PLACES.* entry its own asset id + <img>/<video>
+        tag below (see docs/DEVELOPER.md "Adding real content").
+      -->
+      <img id="sampleImg" src="Images/sample.jpg" crossorigin="anonymous" />
+      <video id="sampleVideo" src="Videos/Videos/render_vr_4k_360_degrees_abandoned_city_lbxac784608_59de36f0.mp4" crossorigin="anonymous"
+             preload="auto" playsinline webkit-playsinline loop="true" muted></video>
     </a-assets>
 
-    <a-sky id="sky" src="#Partition1" rotation="0 -90 0"></a-sky>
+    <a-sky id="sky" src="#sampleImg" rotation="0 -90 0"></a-sky>
     <a-videosphere id="videoSphere" visible="false" rotation="0 -90 0"></a-videosphere>
+
+    <!-- Big 3D buttons that live "in" the current 360 scene. -->
     <a-entity id="hotspot-container"></a-entity>
 
-    <a-entity id="cameraRig">
-      <a-camera id="camera" position="0 1.6 0" wasd-controls look-controls="pointerLockEnabled: true">
-        <a-ring id="gazeLoader" position="0 0 -0.6" radius-inner="0.03" radius-outer="0.04" material="color: #fff; opacity: 0.95; side: double" visible="false" scale="0.001 0.001 0.001"></a-ring>
-        <a-cursor id="cameraCursor" rayOrigin="camera" fuse="false" material="color: #fff; opacity: 0.0"></a-cursor>
-        <a-cursor id="mouseCursor" rayOrigin="mouse" fuse="false" material="color: #fff; opacity: 0.0"></a-cursor>
+    <!-- Small always-present navigation buttons, anchored near the rig. -->
+    <a-entity id="corner-container"></a-entity>
+
+    <a-entity id="cameraRig" position="0 0 0">
+      <a-camera id="camera" position="0 1.6 0" look-controls="pointerLockEnabled: false">
+        <a-ring id="gazeLoader" position="0 0 -0.6" radius-inner="0.03" radius-outer="0.045"
+                material="color: #fff; opacity: 0.95; shader: flat; side: double"
+                visible="false" scale="0.001 0.001 0.001"></a-ring>
+        <a-cursor id="cameraCursor" rayOrigin="camera" fuse="false"
+                  material="color: #fff; opacity: 0.0" raycaster="objects: .clickable"></a-cursor>
+        <a-cursor id="mouseCursor" rayOrigin="mouse" fuse="false"
+                  material="color: #fff; opacity: 0.0" raycaster="objects: .clickable"></a-cursor>
       </a-camera>
     </a-entity>
   </a-scene>
 
-  <audio id="bg-audio" src="Sounds/construction-site1.mp3" crossorigin="anonymous" preload="auto" autoplay muted playsinline webkit-playsinline></audio>
+  <!--
+    Background sound-effect loop from the previous version has been
+    removed for this template pass (per request). Individual scenes
+    are still expected to eventually carry short sound effects — see
+    the "Sound effects (currently disabled)" note in docs/DEVELOPER.md
+    for how to re-introduce them per-scene instead of one global loop.
+  -->
 
 <script>
-    const GAZE_TIME_MS = 1500;
-    const sky = document.getElementById('sky');
-    const videoSphere = document.getElementById('videoSphere');
-    const hotspotContainer = document.getElementById('hotspot-container');
-    const cameraRig = document.getElementById('cameraRig');
-    const gazeLoader = document.getElementById('gazeLoader');
-    const bgAudioEl = document.getElementById('bg-audio');
-    const audioOverlay = document.getElementById('audio-permission-overlay');
-    const audioOverlayButton = document.getElementById('audio-permission-btn');
+  /* ======================================================================
+   * CONFIG / CONTENT DATA
+   * ==================================================================== */
 
-    const PHOBIAS = {
-      arachnophobia: {
-        id: 'arachnophobia',
-        name: 'Arachnophobia',
-        color: '#ff6b6b',
-        coverAsset: 'Partition3',
-        info: 'Gradually approach the space with mild exposure, then increase intensity when the user is ready.',
-        mild: { id: 'arachnophobia-mild', name: 'Mild', type: 'image', asset: 'Partition3' },
-        harsh: { id: 'arachnophobia-harsh', name: 'Harsh', type: 'image', asset: 'Partition4' },
-        calm1: 'calm-garden',
-        calm2: 'beach-retreat'
-      },
-      acrophobia: {
-        id: 'acrophobia',
-        name: 'Acrophobia',
-        color: '#ff9f43',
-        coverAsset: 'Partition2',
-        info: 'Build confidence in open-height environments by moving from limited exposure to stronger visual elevation.',
-        mild: { id: 'acrophobia-mild', name: 'Mild', type: 'image', asset: 'AcroEnv1' },
-        harsh: { id: 'acrophobia-harsh', name: 'Harsh', type: 'video', asset: 'AcroEnv3Video' },
-        calm1: 'calm-garden',
-        calm2: 'beach-retreat'
-      },
-      claustrophobia: {
-        id: 'claustrophobia',
-        name: 'Claustrophobia',
-        color: '#6bcb77',
-        coverAsset: 'Partition5',
-        info: 'Use controlled spatial pressure and gradual movement to help the user process enclosed environments.',
-        mild: { id: 'claustrophobia-mild', name: 'Mild', type: 'image', asset: 'Partition5' },
-        harsh: { id: 'claustrophobia-harsh', name: 'Harsh', type: 'image', asset: 'Partition2' },
-        calm1: 'calm-garden',
-        calm2: 'beach-retreat'
-      },
-      ophidiophobia: {
-        id: 'ophidiophobia',
-        name: 'Ophidiophobia',
-        color: '#a29bfe',
-        coverAsset: 'Partition4',
-        info: 'Progress from low-intensity encounters to more confrontational scenes in a structured order.',
-        mild: { id: 'ophidiophobia-mild', name: 'Mild', type: 'image', asset: 'Partition4' },
-        harsh: { id: 'ophidiophobia-harsh', name: 'Harsh', type: 'image', asset: 'Partition3' },
-        calm1: 'calm-garden',
-        calm2: 'beach-retreat'
+  // Every entry below is a placeholder. Replace text + swap asset ids
+  // once you add real media (see docs/DEVELOPER.md).
+  const PHOBIAS = {
+    arachnophobia: {
+      id: 'arachnophobia',
+      name: 'Arachnophobia',
+      color: '#ff6b6b',
+      info: 'TODO: short description of this phobia pathway.',
+      mild:  { id: 'arachnophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
+      harsh: { id: 'arachnophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      calm1: 'calm-garden',
+      calm2: 'beach-retreat'
+    },
+    acrophobia: {
+      id: 'acrophobia',
+      name: 'Acrophobia',
+      color: '#ff9f43',
+      info: 'TODO: short description of this phobia pathway.',
+      mild:  { id: 'acrophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
+      harsh: { id: 'acrophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      calm1: 'calm-garden',
+      calm2: 'beach-retreat'
+    },
+    claustrophobia: {
+      id: 'claustrophobia',
+      name: 'Claustrophobia',
+      color: '#6bcb77',
+      info: 'TODO: short description of this phobia pathway.',
+      mild:  { id: 'claustrophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
+      harsh: { id: 'claustrophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      calm1: 'calm-garden',
+      calm2: 'beach-retreat'
+    },
+    ophidiophobia: {
+      id: 'ophidiophobia',
+      name: 'Ophidiophobia',
+      color: '#a29bfe',
+      info: 'TODO: short description of this phobia pathway.',
+      mild:  { id: 'ophidiophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
+      harsh: { id: 'ophidiophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      calm1: 'calm-garden',
+      calm2: 'beach-retreat'
+    }
+  };
+
+  const CALM_PLACES = {
+    'calm-garden': {
+      id: 'calm-garden',
+      name: 'Calm Garden',
+      type: 'image',
+      asset: 'sampleImg',
+      info: 'TODO: short description of this calming place.'
+    },
+    'beach-retreat': {
+      id: 'beach-retreat',
+      name: 'Beach Retreat',
+      type: 'image',
+      asset: 'sampleImg',
+      info: 'TODO: short description of this calming place.'
+    }
+  };
+
+  const PHOBIA_ORDER = ['arachnophobia', 'acrophobia', 'claustrophobia', 'ophidiophobia'];
+  const GAZE_TIME_MS = 1400;
+
+  // Cross-layout for the 4 big "in-scene" buttons (home page + phobia page).
+  const MAIN_BUTTON_POSITIONS = ['-1.6 1.0 -2.2', '1.6 1.0 -2.2', '-1.6 -0.2 -2.2', '1.6 -0.2 -2.2'];
+
+  /* ======================================================================
+   * DOM / A-FRAME REFERENCES
+   * ==================================================================== */
+
+  const sky = document.getElementById('sky');
+  const videoSphere = document.getElementById('videoSphere');
+  const hotspotContainer = document.getElementById('hotspot-container');
+  const cornerContainer = document.getElementById('corner-container');
+  const cameraRig = document.getElementById('cameraRig');
+  const gazeLoader = document.getElementById('gazeLoader');
+  const sceneLabel = document.getElementById('scene-label');
+
+  const state = {
+    activeScene: 'home',
+    returnToPhobia: null // which phobia page a calm scene should return to
+  };
+
+  let gazeState = { active: false, start: 0, raf: null, onComplete: null };
+
+  /* ======================================================================
+   * BACKGROUND (image sky vs 360 video) HELPERS
+   * ==================================================================== */
+
+  function pauseAllVideoAssets() {
+    document.querySelectorAll('a-assets video').forEach((videoEl) => {
+      if (typeof videoEl.pause === 'function') videoEl.pause();
+    });
+  }
+
+  function setBackgroundFromScene(scene) {
+    pauseAllVideoAssets();
+
+    if (scene && scene.type === 'video') {
+      sky.setAttribute('visible', 'false');
+      videoSphere.setAttribute('src', `#${scene.asset}`);
+      videoSphere.setAttribute('visible', 'true');
+      const videoEl = document.getElementById(scene.asset);
+      if (videoEl && typeof videoEl.play === 'function') {
+        videoEl.muted = true; // autoplay reliability; unmute in real content once tested
+        videoEl.play().catch(() => {});
       }
-    };
-
-    const CALM_PLACES = {
-      'calm-garden': {
-        id: 'calm-garden',
-        name: 'Calm Garden',
-        asset: 'Partition5',
-        info: 'A low-stress environment for breathing, grounding, and reset between exposures.'
-      },
-      'beach-retreat': {
-        id: 'beach-retreat',
-        name: 'Beach Retreat',
-        asset: 'Partition1',
-        info: 'A quieter coastal environment designed to reduce pressure before the next exercise.'
-      }
-    };
-
-    const state = {
-      activeScene: 'home',
-      returnToPhobia: 'arachnophobia'
-    };
-
-    let gazeState = { active: false, start: 0, raf: null, onComplete: null };
-
-    function pauseAllVideoScenes() {
-      const videoIds = ['AcroEnv3Video'];
-      videoIds.forEach((id) => {
-        const videoEl = document.getElementById(id);
-        if (videoEl && typeof videoEl.pause === 'function') {
-          videoEl.pause();
-        }
-      });
+      return;
     }
 
-    function setBackgroundFromScene(scene) {
-      pauseAllVideoScenes();
+    videoSphere.setAttribute('visible', 'false');
+    const assetId = scene ? scene.asset : 'sampleImg';
+    sky.setAttribute('src', `#${assetId}`);
+    sky.setAttribute('visible', 'true');
+  }
 
-      if (scene && scene.type === 'video') {
-        sky.setAttribute('visible', 'false');
-        videoSphere.setAttribute('src', `#${scene.asset}`);
-        videoSphere.setAttribute('visible', 'true');
-        const videoEl = document.getElementById(scene.asset);
-        if (videoEl && typeof videoEl.play === 'function') {
-          videoEl.play().catch(() => {});
-        }
+  /* ======================================================================
+   * UI TEARDOWN
+   * ==================================================================== */
+
+  function clearHotspots() {
+    while (hotspotContainer.firstChild) hotspotContainer.removeChild(hotspotContainer.firstChild);
+  }
+
+  function clearCornerButtons() {
+    while (cornerContainer.firstChild) cornerContainer.removeChild(cornerContainer.firstChild);
+  }
+
+  /* ======================================================================
+   * TEXT PANEL HELPER
+   * ==================================================================== */
+
+  function addTextBlock({ x = 0, y = 0, z = -2.4, width = 1.8, color = '#fff', text }) {
+    const entity = document.createElement('a-entity');
+    entity.setAttribute('position', `${x} ${y} ${z}`);
+    entity.setAttribute('text', `value:${text}; width:${width}; align:center; color:${color}; wrapCount:30; shader:msdf`);
+    return entity;
+  }
+
+  /* ======================================================================
+   * GAZE (dwell-to-click) HELPERS
+   * ==================================================================== */
+
+  function showLoader() {
+    gazeLoader.setAttribute('visible', 'true');
+    gazeLoader.setAttribute('scale', '0.001 0.001 0.001');
+  }
+
+  function hideLoader() {
+    gazeLoader.setAttribute('visible', 'false');
+  }
+
+  function updateLoader(progress) {
+    const minScale = 0.001;
+    const scale = minScale + progress * (1 - minScale);
+    gazeLoader.setAttribute('scale', `${scale} ${scale} ${scale}`);
+  }
+
+  function cancelGaze() {
+    if (!gazeState.active) return;
+    gazeState.active = false;
+    gazeState.onComplete = null;
+    if (gazeState.raf) {
+      cancelAnimationFrame(gazeState.raf);
+      gazeState.raf = null;
+    }
+    hideLoader();
+  }
+
+  function startGaze(onComplete) {
+    cancelGaze();
+    gazeState.active = true;
+    gazeState.start = performance.now();
+    gazeState.onComplete = onComplete;
+    showLoader();
+
+    const tick = (now) => {
+      if (!gazeState.active) return;
+      const progress = Math.min(1, (now - gazeState.start) / GAZE_TIME_MS);
+      updateLoader(progress);
+
+      if (progress >= 1) {
+        gazeState.active = false;
+        hideLoader();
+        const cb = gazeState.onComplete;
+        gazeState.onComplete = null;
+        if (cb) cb();
         return;
       }
-
-      const assetId = scene ? scene.asset : 'Partition1';
-      videoSphere.setAttribute('visible', 'false');
-      const asset = document.getElementById(assetId);
-      if (asset) {
-        sky.setAttribute('src', `#${assetId}`);
-      }
-      sky.setAttribute('visible', 'true');
-    }
-
-    function clearHotspots() {
-      while (hotspotContainer.firstChild) {
-        hotspotContainer.removeChild(hotspotContainer.firstChild);
-      }
-    }
-
-    function clearSideButtons() {
-      const buttons = cameraRig.querySelectorAll('[data-side-button="true"]');
-      buttons.forEach((button) => {
-        if (button.parentNode) {
-          button.parentNode.removeChild(button);
-        }
-      });
-    }
-
-    function addTextBlock({ x = 0, y = 0, z = -2.4, width = 1.6, color = '#fff', text }) {
-      const entity = document.createElement('a-entity');
-      entity.setAttribute('position', `${x} ${y} ${z}`);
-      entity.setAttribute('text', `value:${text}; width:${width}; align:center; color:${color}; wrapCount:28; shader:msdf`);
-      return entity;
-    }
-
-    function showLoader() {
-      gazeLoader.setAttribute('visible', 'true');
-      gazeLoader.setAttribute('scale', '0.001 0.001 0.001');
-    }
-
-    function hideLoader() {
-      gazeLoader.setAttribute('visible', 'false');
-    }
-
-    function updateLoader(progress) {
-      const minScale = 0.001;
-      const scale = minScale + progress * (1 - minScale);
-      gazeLoader.setAttribute('scale', `${scale} ${scale} ${scale}`);
-    }
-
-    function cancelGaze() {
-      if (!gazeState.active) return;
-      gazeState.active = false;
-      gazeState.onComplete = null;
-      if (gazeState.raf) {
-        cancelAnimationFrame(gazeState.raf);
-        gazeState.raf = null;
-      }
-      hideLoader();
-    }
-
-    function startGaze(onComplete) {
-      cancelGaze();
-      gazeState.active = true;
-      gazeState.start = performance.now();
-      gazeState.onComplete = onComplete;
-      showLoader();
-
-      const tick = (now) => {
-        if (!gazeState.active) return;
-        const elapsed = now - gazeState.start;
-        const progress = Math.min(1, elapsed / GAZE_TIME_MS);
-        updateLoader(progress);
-
-        if (progress >= 1) {
-          gazeState.active = false;
-          hideLoader();
-          if (gazeState.onComplete) {
-            gazeState.onComplete();
-          }
-          gazeState.onComplete = null;
-          return;
-        }
-
-        gazeState.raf = requestAnimationFrame(tick);
-      };
-
       gazeState.raf = requestAnimationFrame(tick);
-    }
+    };
+    gazeState.raf = requestAnimationFrame(tick);
+  }
 
-    function makeMainButton({ id, label, color, position, onClick }) {
-      const wrapper = document.createElement('a-entity');
-      wrapper.setAttribute('id', id);
-      wrapper.setAttribute('position', position);
+  /* ======================================================================
+   * BUTTON FACTORIES
+   *  - makeMainButton: big 3D object placed inside the 360 scene itself.
+   *  - makeCornerButton: small persistent nav button anchored near the rig.
+   * Both work with mouse click, touch tap, AND VR gaze-dwell.
+   * ==================================================================== */
 
-      const bg = document.createElement('a-plane');
-      bg.setAttribute('width', '1.5');
-      bg.setAttribute('height', '0.4');
-      bg.setAttribute('material', `color: ${color}; opacity: 0.9; side: double`);
-      bg.setAttribute('position', '0 0 0');
+  function wireInteractions(bg, onClick) {
+    bg.classList.add('clickable');
+    const trigger = () => { if (typeof onClick === 'function') onClick(); };
+    bg.addEventListener('click', trigger);           // mouse + touch tap
+    bg.addEventListener('mouseenter', () => startGaze(trigger)); // gaze dwell
+    bg.addEventListener('mouseleave', cancelGaze);
+    return trigger;
+  }
 
-      const text = document.createElement('a-entity');
-      text.setAttribute('position', '0 0 0.02');
-      text.setAttribute('text', `value:${label}; align:center; width:1.2; color:#fff; wrapCount:16; shader:msdf`);
+  function makeMainButton({ id, label, color, position, onClick }) {
+    const wrapper = document.createElement('a-entity');
+    wrapper.setAttribute('id', id);
+    wrapper.setAttribute('position', position);
 
-      const trigger = () => {
-        if (typeof onClick === 'function') {
-          onClick();
-        }
-      };
+    const bg = document.createElement('a-plane');
+    bg.setAttribute('width', '1.5');
+    bg.setAttribute('height', '0.42');
+    bg.setAttribute('material', `color: ${color}; opacity: 0.92; shader: flat; side: double`);
 
-      bg.addEventListener('click', trigger);
-      bg.addEventListener('mouseenter', () => startGaze(trigger));
-      bg.addEventListener('mouseleave', cancelGaze);
+    const text = document.createElement('a-entity');
+    text.setAttribute('position', '0 0 0.02');
+    text.setAttribute('text', `value:${label}; align:center; width:1.3; color:#fff; wrapCount:16; shader:msdf`);
 
-      wrapper.appendChild(bg);
-      wrapper.appendChild(text);
-      return wrapper;
-    }
+    wireInteractions(bg, onClick);
+    wrapper.appendChild(bg);
+    wrapper.appendChild(text);
+    hotspotContainer.appendChild(wrapper);
+    return wrapper;
+  }
 
-    function makeSideButton({ id, label, position, color = '#1976d2', width = '0.48', height = '0.18', onClick }) {
-      const wrapper = document.createElement('a-entity');
-      wrapper.setAttribute('id', id);
-      wrapper.setAttribute('position', position);
-      wrapper.setAttribute('data-side-button', 'true');
+  // position here is in "corner-container" local space, i.e. fixed near
+  // the rig's starting orientation — see docs/DEVELOPER.md for why these
+  // are NOT attached to the camera object itself.
+  function makeCornerButton({ id, label, position, color = '#1976d2', width = 0.62, height = 0.2, onClick }) {
+    const wrapper = document.createElement('a-entity');
+    wrapper.setAttribute('id', id);
+    wrapper.setAttribute('position', position);
 
-      const bg = document.createElement('a-plane');
-      bg.setAttribute('width', width);
-      bg.setAttribute('height', height);
-      bg.setAttribute('material', `color: ${color}; opacity: 0.95; side: double`);
-      bg.setAttribute('position', '0 0 0');
+    const bg = document.createElement('a-plane');
+    bg.setAttribute('width', String(width));
+    bg.setAttribute('height', String(height));
+    bg.setAttribute('material', `color: ${color}; opacity: 0.95; shader: flat; side: double`);
 
-      const text = document.createElement('a-entity');
-      text.setAttribute('position', '0 0 0.02');
-      text.setAttribute('text', `value:${label}; align:center; width:0.3; color:#fff; wrapCount:12; shader:msdf`);
+    const text = document.createElement('a-entity');
+    text.setAttribute('position', '0 0 0.02');
+    text.setAttribute('text', `value:${label}; align:center; width:${width * 0.9}; color:#fff; wrapCount:14; shader:msdf`);
 
-      const trigger = () => {
-        if (typeof onClick === 'function') {
-          onClick();
-        }
-      };
+    wireInteractions(bg, onClick);
+    wrapper.appendChild(bg);
+    wrapper.appendChild(text);
+    cornerContainer.appendChild(wrapper);
+    return wrapper;
+  }
 
-      bg.addEventListener('click', trigger);
-      bg.addEventListener('mouseenter', () => startGaze(trigger));
-      bg.addEventListener('mouseleave', cancelGaze);
+  /* ======================================================================
+   * SCENE RENDER FUNCTIONS
+   * ==================================================================== */
 
-      wrapper.appendChild(bg);
-      wrapper.appendChild(text);
-      cameraRig.appendChild(wrapper);
-      return wrapper;
-    }
+  function renderHome() {
+    state.activeScene = 'home';
+    state.returnToPhobia = null;
+    sceneLabel.textContent = 'Home';
+    clearHotspots();
+    clearCornerButtons();
+    setBackgroundFromScene({ type: 'image', asset: 'sampleImg' });
 
-    function renderHome() {
-      state.activeScene = 'home';
-      clearHotspots();
-      clearSideButtons();
-      setBackgroundFromScene({ asset: 'Partition1' });
+    hotspotContainer.appendChild(addTextBlock({
+      x: 0, y: 2.15, z: -2.8, width: 2.4,
+      text: 'VR Exposure Therapy\nChoose a phobia to begin'
+    }));
 
-      const title = addTextBlock({
-        x: 0,
-        y: 2.1,
-        z: -2.8,
-        width: 2.2,
-        text: 'VR Exposure Therapy\nChoose a phobia to begin'
-      });
-      hotspotContainer.appendChild(title);
+    hotspotContainer.appendChild(addTextBlock({
+      x: 0, y: 1.55, z: -2.7, width: 2.0, color: '#dfeaff',
+      text: 'TODO: project description for participants goes here.'
+    }));
 
-      const info = addTextBlock({
-        x: 0,
-        y: 1.1,
-        z: -2.6,
-        width: 1.8,
-        color: '#dfeaff',
-        text: 'Project overview:\n4 phobia pathways\n2 calming spaces\nMouse, touch, and gaze navigation'
-      });
-      hotspotContainer.appendChild(info);
-
-      const phobiaOrder = ['arachnophobia', 'acrophobia', 'claustrophobia', 'ophidiophobia'];
-      const positions = ['-1.5 0.8 -2.4', '1.5 0.8 -2.4', '-1.5 -0.2 -2.4', '1.5 -0.2 -2.4'];
-
-      phobiaOrder.forEach((phobiaId, index) => {
-        const phobia = PHOBIAS[phobiaId];
-        const button = makeMainButton({
-          id: `home-${phobia.id}`,
-          label: phobia.name,
-          color: phobia.color,
-          position: positions[index],
-          onClick: () => renderPhobiaPage(phobiaId)
-        });
-        hotspotContainer.appendChild(button);
-      });
-    }
-
-    function renderPhobiaPage(phobiaId) {
+    PHOBIA_ORDER.forEach((phobiaId, index) => {
       const phobia = PHOBIAS[phobiaId];
-      if (!phobia) return;
-
-      state.activeScene = `phobia-page:${phobiaId}`;
-      state.returnToPhobia = phobiaId;
-      clearHotspots();
-      clearSideButtons();
-      setBackgroundFromScene({ asset: phobia.coverAsset });
-
-      const title = addTextBlock({
-        x: 0,
-        y: 2.1,
-        z: -2.8,
-        width: 2.2,
-        text: `${phobia.name}\n${phobia.info}`
-      });
-      hotspotContainer.appendChild(title);
-
-      const actions = [
-        { label: `${phobia.mild.name} scene`, color: phobia.color, onClick: () => renderPhobiaScene(phobiaId, 'mild') },
-        { label: `${phobia.harsh.name} scene`, color: '#d62839', onClick: () => renderPhobiaScene(phobiaId, 'harsh') },
-        { label: CALM_PLACES[phobia.calm1].name, color: '#74b9ff', onClick: () => renderCalmScene(phobia.calm1, phobiaId) },
-        { label: CALM_PLACES[phobia.calm2].name, color: '#55efc4', onClick: () => renderCalmScene(phobia.calm2, phobiaId) }
-      ];
-
-      const positions = ['-1.5 0.8 -2.4', '1.5 0.8 -2.4', '-1.5 -0.2 -2.4', '1.5 -0.2 -2.4'];
-
-      actions.forEach((action, index) => {
-        const button = makeMainButton({
-          id: `${phobiaId}-${index}`,
-          label: action.label,
-          color: action.color,
-          position: positions[index],
-          onClick: action.onClick
-        });
-        hotspotContainer.appendChild(button);
-      });
-
-      makeSideButton({
-        id: `${phobiaId}-home-side`,
-        label: 'Home',
-        position: '-0.95 0.9 -1.2',
-        color: '#ffffff',
-        width: '0.42',
-        height: '0.16',
-        onClick: renderHome
-      });
-    }
-
-    function renderPhobiaScene(phobiaId, intensity) {
-      const phobia = PHOBIAS[phobiaId];
-      if (!phobia) return;
-
-      const sceneData = phobia[intensity];
-      if (!sceneData) return;
-
-      state.activeScene = sceneData.id;
-      clearHotspots();
-      clearSideButtons();
-      setBackgroundFromScene(sceneData);
-
-      const title = addTextBlock({
-        x: 0,
-        y: 2.0,
-        z: -2.7,
-        width: 1.8,
-        text: `${phobia.name}\n${sceneData.name} scene`
-      });
-      hotspotContainer.appendChild(title);
-
-      makeSideButton({
-        id: `${sceneData.id}-home`,
-        label: 'Home',
-        position: '-0.95 0.9 -1.2',
-        color: '#ffffff',
-        width: '0.42',
-        height: '0.16',
-        onClick: renderHome
-      });
-
-      makeSideButton({
-        id: `${sceneData.id}-phobia-page`,
+      makeMainButton({
+        id: `home-${phobia.id}`,
         label: phobia.name,
-        position: '0.95 0.9 -1.2',
-        color: '#1976d2',
-        width: '0.68',
-        height: '0.16',
+        color: phobia.color,
+        position: MAIN_BUTTON_POSITIONS[index],
         onClick: () => renderPhobiaPage(phobiaId)
       });
-
-      makeSideButton({
-        id: `${sceneData.id}-calm-1`,
-        label: CALM_PLACES[phobia.calm1].name,
-        position: '-0.95 0.35 -1.2',
-        color: '#74b9ff',
-        width: '0.68',
-        height: '0.16',
-        onClick: () => renderCalmScene(phobia.calm1, phobiaId)
-      });
-
-      makeSideButton({
-        id: `${sceneData.id}-calm-2`,
-        label: CALM_PLACES[phobia.calm2].name,
-        position: '0.95 0.35 -1.2',
-        color: '#55efc4',
-        width: '0.68',
-        height: '0.16',
-        onClick: () => renderCalmScene(phobia.calm2, phobiaId)
-      });
-    }
-
-    function renderCalmScene(calmId, fromPhobiaId = state.returnToPhobia) {
-      const calm = CALM_PLACES[calmId];
-      if (!calm) return;
-
-      state.activeScene = calm.id;
-      clearHotspots();
-      clearSideButtons();
-      setBackgroundFromScene({ asset: calm.asset });
-
-      const info = addTextBlock({
-        x: 0,
-        y: 2.0,
-        z: -2.7,
-        width: 1.8,
-        text: `${calm.name}\n${calm.info}`
-      });
-      hotspotContainer.appendChild(info);
-
-      const phobiaName = PHOBIAS[fromPhobiaId]?.name || 'Phobia page';
-      makeSideButton({
-        id: `${calm.id}-return-phobia`,
-        label: `Back to ${phobiaName}`,
-        position: '0 0.7 -1.2',
-        color: '#ffffff',
-        width: '0.9',
-        height: '0.18',
-        onClick: () => renderPhobiaPage(fromPhobiaId)
-      });
-    }
-
-    function resumeAudioContext() {
-      try {
-        if (AFRAME && AFRAME.audio && AFRAME.audio.context && AFRAME.audio.context.state === 'suspended') {
-          AFRAME.audio.context.resume().catch(() => {});
-        }
-        if (window.audioContext && typeof window.audioContext.resume === 'function') {
-          window.audioContext.resume().catch(() => {});
-        }
-      } catch (error) {
-        // Ignore browser-specific audio issues.
-      }
-    }
-
-    function showAudioOverlay() {
-      audioOverlay.classList.add('show');
-      audioOverlay.setAttribute('aria-hidden', 'false');
-    }
-
-    function hideAudioOverlay() {
-      audioOverlay.classList.remove('show');
-      audioOverlay.setAttribute('aria-hidden', 'true');
-    }
-
-    function initAudioAutoplayRobust() {
-      bgAudioEl.loop = true;
-      bgAudioEl.volume = 0.6;
-
-      const tryPlay = () => {
-        const playPromise = bgAudioEl.play();
-        if (playPromise && typeof playPromise.then === 'function') {
-          playPromise.then(() => {
-            bgAudioEl.muted = false;
-            hideAudioOverlay();
-          }).catch(() => {
-            bgAudioEl.muted = true;
-            showAudioOverlay();
-          });
-        }
-      };
-
-      tryPlay();
-
-      const handleUserInteraction = () => {
-        resumeAudioContext();
-        bgAudioEl.muted = false;
-        bgAudioEl.play().catch(() => {});
-        hideAudioOverlay();
-        window.removeEventListener('pointerdown', handleUserInteraction, true);
-        audioOverlayButton.removeEventListener('click', handleUserInteraction, true);
-      };
-
-      window.addEventListener('pointerdown', handleUserInteraction, { capture: true });
-      audioOverlayButton.addEventListener('click', handleUserInteraction, { capture: true });
-    }
-
-    document.querySelector('a-scene').addEventListener('loaded', () => {
-      initAudioAutoplayRobust();
-      renderHome();
     });
-  </script>
+    // Home has no corner buttons — there is nowhere "back" to go from here.
+  }
+
+  function renderPhobiaPage(phobiaId) {
+    const phobia = PHOBIAS[phobiaId];
+    if (!phobia) return;
+
+    state.activeScene = `phobia-page:${phobiaId}`;
+    sceneLabel.textContent = `${phobia.name} — overview`;
+    clearHotspots();
+    clearCornerButtons();
+    setBackgroundFromScene({ type: 'image', asset: 'sampleImg' });
+
+    hotspotContainer.appendChild(addTextBlock({
+      x: 0, y: 2.15, z: -2.8, width: 2.4,
+      text: `${phobia.name}\n${phobia.info}`
+    }));
+
+    const actions = [
+      { label: phobia.mild.name,  color: phobia.color,   onClick: () => renderPhobiaScene(phobiaId, 'mild') },
+      { label: phobia.harsh.name, color: '#d62839',       onClick: () => renderPhobiaScene(phobiaId, 'harsh') },
+      { label: CALM_PLACES[phobia.calm1].name, color: '#74b9ff', onClick: () => renderCalmScene(phobia.calm1, phobiaId) },
+      { label: CALM_PLACES[phobia.calm2].name, color: '#55efc4', onClick: () => renderCalmScene(phobia.calm2, phobiaId) }
+    ];
+
+    actions.forEach((action, index) => {
+      makeMainButton({
+        id: `${phobiaId}-action-${index}`,
+        label: action.label,
+        color: action.color,
+        position: MAIN_BUTTON_POSITIONS[index],
+        onClick: action.onClick
+      });
+    });
+
+    // Requirement: 1 little "go back to home" button on the phobia page.
+    makeCornerButton({
+      id: `${phobiaId}-home-corner`,
+      label: 'Home',
+      position: '-1.0 -0.6 -1.3',
+      color: '#ffffff',
+      width: 0.5, height: 0.18,
+      onClick: renderHome
+    });
+  }
+
+  function renderPhobiaScene(phobiaId, intensity) {
+    const phobia = PHOBIAS[phobiaId];
+    if (!phobia) return;
+    const sceneData = phobia[intensity];
+    if (!sceneData) return;
+
+    state.activeScene = sceneData.id;
+    state.returnToPhobia = phobiaId;
+    sceneLabel.textContent = `${phobia.name} — ${sceneData.name}`;
+    clearHotspots();
+    clearCornerButtons();
+    setBackgroundFromScene(sceneData);
+
+    hotspotContainer.appendChild(addTextBlock({
+      x: 0, y: 2.0, z: -2.7, width: 2.0,
+      text: `${phobia.name}\n${sceneData.name}`
+    }));
+
+    // Requirement: 4 little side buttons — home, this phobia's page,
+    // calm place 1, calm place 2. Arranged as two bottom corners.
+    makeCornerButton({
+      id: `${sceneData.id}-home`,
+      label: 'Home',
+      position: '-1.3 -0.65 -1.3',
+      color: '#ffffff',
+      onClick: renderHome
+    });
+    makeCornerButton({
+      id: `${sceneData.id}-phobia-page`,
+      label: phobia.name,
+      position: '-1.3 -0.95 -1.3',
+      color: '#1976d2',
+      onClick: () => renderPhobiaPage(phobiaId)
+    });
+    makeCornerButton({
+      id: `${sceneData.id}-calm-1`,
+      label: CALM_PLACES[phobia.calm1].name,
+      position: '1.3 -0.65 -1.3',
+      color: '#74b9ff',
+      onClick: () => renderCalmScene(phobia.calm1, phobiaId)
+    });
+    makeCornerButton({
+      id: `${sceneData.id}-calm-2`,
+      label: CALM_PLACES[phobia.calm2].name,
+      position: '1.3 -0.95 -1.3',
+      color: '#55efc4',
+      onClick: () => renderCalmScene(phobia.calm2, phobiaId)
+    });
+  }
+
+  function renderCalmScene(calmId, fromPhobiaId) {
+    const calm = CALM_PLACES[calmId];
+    if (!calm) return;
+    const returnPhobiaId = fromPhobiaId || state.returnToPhobia || PHOBIA_ORDER[0];
+
+    state.activeScene = calm.id;
+    state.returnToPhobia = returnPhobiaId;
+    sceneLabel.textContent = calm.name;
+    clearHotspots();
+    clearCornerButtons();
+    setBackgroundFromScene(calm);
+
+    hotspotContainer.appendChild(addTextBlock({
+      x: 0, y: 2.0, z: -2.7, width: 2.0,
+      text: `${calm.name}\n${calm.info}`
+    }));
+
+    // Requirement: exactly 1 little button here — back to the phobia
+    // page the user came from.
+    const phobiaName = PHOBIAS[returnPhobiaId] ? PHOBIAS[returnPhobiaId].name : 'Phobia page';
+    makeCornerButton({
+      id: `${calm.id}-return-phobia`,
+      label: `Back to ${phobiaName}`,
+      position: '0 -0.8 -1.3',
+      color: '#ffffff',
+      width: 0.9, height: 0.2,
+      onClick: () => renderPhobiaPage(returnPhobiaId)
+    });
+  }
+
+  /* ======================================================================
+   * OPTIONAL / EXPERIMENTAL: hardware volume-key hook
+   *
+   * Disabled by default. Most mobile browsers never fire these key
+   * events for volume buttons at all (the OS reserves them for system
+   * volume). This is left here only in case you want to try it on a
+   * specific device/browser combo during testing; do not rely on it.
+   * See docs/DEVELOPER.md for details.
+   * ==================================================================== */
+  const ENABLE_EXPERIMENTAL_VOLUME_KEYS = false;
+
+  if (ENABLE_EXPERIMENTAL_VOLUME_KEYS) {
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'AudioVolumeUp') {
+        const homeBtn = document.querySelector('#corner-container a-plane.clickable');
+        if (homeBtn) homeBtn.emit('click');
+      }
+    });
+  }
+
+  /* ======================================================================
+   * INIT
+   * ==================================================================== */
+
+  document.querySelector('a-scene').addEventListener('loaded', () => {
+    renderHome();
+  });
+</script>
 </body>
 </html>
