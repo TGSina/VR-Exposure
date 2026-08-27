@@ -24,8 +24,8 @@
 <body>
   <div id="help-top">
     Desktop: click a button. Phone: tap a button.<br />
-    VR headset (no controller): look at a button and hold your gaze
-    &mdash; a ring fills up, then it activates.
+    VR headset (no controller): the black dot is where you're looking —
+    rest it on a button and hold still; a ring fills up, then it activates.
   </div>
   <div id="scene-label"></div>
 
@@ -45,32 +45,31 @@
   <a-scene embedded>
     <a-assets timeout="10000">
       <!--
-        TEMPLATE ASSETS ONLY.
-        Every scene in this template currently points at these two
-        placeholder files:
-          Images/sample.jpg   -> equirectangular / 360 photo placeholder
-          Videos/sample.mp4   -> equirectangular / 360 video placeholder
-        Put your real 360 images/videos in the Images/ and Videos/
-        folders next to this file, then give each PHOBIAS.*.mild /
-        .harsh / CALM_PLACES.* entry its own asset id + <img>/<video>
-        tag below (see docs/DEVELOPER.md "Adding real content").
+        Only ONE reusable <video> tag lives here. Whichever scene is
+        currently a video (see SCENE_MEDIA near the top of the <script>
+        block below) has its file loaded into this element at runtime.
+        Image scenes are set directly on <a-sky src="..."> and don't
+        need anything declared here.
       -->
-      <img id="sampleImg" src="Images/sample.jpg" crossorigin="anonymous" />
-      <video id="sampleVideo" src="Videos/Videos/render_vr_4k_360_degrees_abandoned_city_lbxac784608_59de36f0.mp4" crossorigin="anonymous"
-             preload="auto" playsinline webkit-playsinline loop="true" muted></video>
+      <video id="activeVideo" crossorigin="anonymous" preload="auto"
+             playsinline webkit-playsinline loop="true" muted></video>
     </a-assets>
 
-    <a-sky id="sky" src="#sampleImg" rotation="0 -90 0"></a-sky>
+    <a-sky id="sky" rotation="0 -90 0"></a-sky>
     <a-videosphere id="videoSphere" visible="false" rotation="0 -90 0"></a-videosphere>
 
     <!-- Big 3D buttons that live "in" the current 360 scene. -->
     <a-entity id="hotspot-container"></a-entity>
 
-    <!-- Small always-present navigation buttons, anchored near the rig. -->
+    <!-- Small persistent navigation buttons (see CORNER_BUTTON_* settings). -->
     <a-entity id="corner-container"></a-entity>
 
     <a-entity id="cameraRig" position="0 0 0">
       <a-camera id="camera" position="0 1.6 0" look-controls="pointerLockEnabled: false">
+        <!-- Always-visible gaze reticle: small black dot at screen center. -->
+        <a-circle id="gazeDot" position="0 0 -0.6" radius="0.006"
+                  material="color:#000; opacity:0.85; shader:flat; side: double"></a-circle>
+        <!-- Progress ring: hidden until the dot rests on a button, then fills up. -->
         <a-ring id="gazeLoader" position="0 0 -0.6" radius-inner="0.03" radius-outer="0.045"
                 material="color: #fff; opacity: 0.95; shader: flat; side: double"
                 visible="false" scale="0.001 0.001 0.001"></a-ring>
@@ -82,29 +81,152 @@
     </a-entity>
   </a-scene>
 
-  <!--
-    Background sound-effect loop from the previous version has been
-    removed for this template pass (per request). Individual scenes
-    are still expected to eventually carry short sound effects — see
-    the "Sound effects (currently disabled)" note in docs/DEVELOPER.md
-    for how to re-introduce them per-scene instead of one global loop.
-  -->
+  <!-- Reusable background-music element for image scenes; see SCENE_MEDIA. -->
+  <audio id="sceneMusic" preload="auto" loop></audio>
 
 <script>
-  /* ======================================================================
-   * CONFIG / CONTENT DATA
-   * ==================================================================== */
+  /* ========================================================================
+   * ⚙️ 1. CONTENT SETTINGS — put your real file paths here
+   *
+   * One entry per scene, keyed by the same ids used in PHOBIAS / CALM_PLACES
+   * further down (don't rename the keys, just change the values).
+   *
+   *   src   -> path to that scene's 360° file — image OR video, either is
+   *            fine in the same field. The code decides which one it is by
+   *            looking at the file extension (see isVideoSrc() below) —
+   *            you never need to say "this one is a video" yourself.
+   *            Recognized video extensions: .mp4 .webm .mov .m4v
+   *            Anything else (.jpg .jpeg .png .webp ...) is treated as an
+   *            image.
+   *   music -> (images only) path to a background-music file that loops
+   *            for as long as that scene is shown. Set to null for no
+   *            music. Video scenes ignore this field — if a video needs
+   *            sound, put the sound in the video file itself.
+   *
+   * Right now every value below is still the shared placeholder file, with
+   * 3 scenes (2 phobia "harsh" scenes + 1 calming place) wired as the
+   * placeholder VIDEO and the other 7 wired as the placeholder IMAGE, so
+   * you can see/test both code paths immediately. Swap in real files
+   * whenever you're ready — nothing else in the file needs to change.
+   * ====================================================================== */
+  const SCENE_MEDIA = {
+    // kenophobia or liminophobia ==> abondoned or empty places
+    'kenophobia-mild':   { src: 'Images/kenophobia_mild_peppermint_powerplant.jpg', music: 'Sounds/kenophobia_mild.mp3' },
+    'kenophobia-harsh':  { src: 'Images/kenophobia_harsh.jpg', music: "Sounds/kenophobia_harsh_haunted-mansion-echo-ambiance.mp3" },
 
-  // Every entry below is a placeholder. Replace text + swap asset ids
-  // once you add real media (see docs/DEVELOPER.md).
+    // acrophobia ==> height
+    'acrophobia-mild':      
+    { 
+      src: 'Images/acrophobia_mild_sunset_jhbcentral.jpg', 
+      music: 'Sounds/acrophibia_mild_521696__podcapocalipsis__wind-blowing.mp3' 
+    },
+    'acrophobia-harsh':     
+    {
+      src: 'Videos/acrophobia_walk_the_tight_rope_360_video_jtazmfcuq90_e2442560.mp4', 
+      music: null 
+    },
+
+    // claustrophobia ==> tight places
+    'claustrophobia-mild':  
+    { 
+      src: 'Images/claustrophobia_mild.png', 
+      music: null //'Sounds/sample-music.mp3' 
+    },
+    'claustrophobia-harsh': 
+    { 
+      src: 'Videos/claustrophobia_harsh_output.mp4', 
+      music: null
+    },
+
+    // mysophobia or germophobia ==> dirty places
+    'mysophobia-mild':   { src: 'Images/mysophobia_mild_Grok.jpg', music: null }, 
+    'mysophobia-harsh':  { src: 'Images/mysophobia_harsh_panorama-generator-bfc9bc2e-8203-4566-87d7-75fb7a238a71.png', music: null },
+
+    // calming places
+    'calm-garden':           { src: 'Images/calm_forest_lauter_waterfall.jpg', music: 'Sounds/garden_jungle-nature.mp3' },
+    'beach-retreat':         { src: 'Images/calm_beach_spiaggia_di_mondello_2k.jpg', music: "Sounds/calm_beach-atmosphere.mp3" }
+  };
+
+  // Backgrounds for the two non-therapy "menu" scenes (Home, and every
+  // phobia's overview page). These are not part of the 10 scenes above —
+  // they're just the menu backdrop — but you can point them at your own
+  // images too. Must be images (menu pages don't support video).
+  const HOME_BACKGROUND_IMAGE = 'Images/sample.jpg';
+  const PHOBIA_PAGE_BACKGROUND_IMAGE = 'Images/sample.jpg';
+
+  const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.m4v'];
+  function isVideoSrc(src) {
+    const lower = String(src).toLowerCase();
+    return VIDEO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  }
+
+  /* ========================================================================
+   * ⚙️ 2. BUTTON LAYOUT SETTINGS — adjust here
+   *
+   * All positions are "x y z" strings in meters, world space. The camera
+   * sits at CAMERA_EYE_HEIGHT looking straight down -Z by default, so:
+   *   - a bigger Y  = the user looks UP to find it
+   *   - a smaller Y = the user looks DOWN to find it
+   *   - a more negative Z = further away from the user
+   *
+   * MAIN buttons = the 4 big buttons on the Home page and each phobia's
+   * overview page. CORNER buttons = the small persistent nav buttons on
+   * phobia pages / phobia scenes / calm scenes. Corner buttons now use
+   * the exact same kind of in-scene placement as the main buttons (fixed
+   * points in the 360° world at MAIN_BUTTON_Z/CORNER_BUTTON_Z distance,
+   * not glued oddly close to the camera), just higher up and smaller, so
+   * the user has to glance a little upward, above the main buttons, on
+   * purpose — that keeps them from being triggered by accident while
+   * using the main buttons, and keeps them inside the comfortable field
+   * of view of a phone-in-Cardboard-box setup.
+   * ====================================================================== */
+  const CAMERA_EYE_HEIGHT = 1.6; // must match the a-camera position="0 X 0" above
+
+  const MAIN_BUTTON_Z = -2.2;
+  const MAIN_BUTTON_TOP_Y = 1.3;      // top row of the 4 main buttons
+  const MAIN_BUTTON_BOTTOM_Y = 0.3;   // bottom row of the 4 main buttons
+  const MAIN_BUTTON_X_OFFSET = 1.6;   // left/right spread of the 4 main buttons
+  const MAIN_BUTTON_WIDTH = 1.5;
+  const MAIN_BUTTON_HEIGHT = 0.42;
+
+  const MAIN_BUTTON_POSITIONS = [
+    `-${MAIN_BUTTON_X_OFFSET} ${MAIN_BUTTON_TOP_Y} ${MAIN_BUTTON_Z}`,
+    `${MAIN_BUTTON_X_OFFSET} ${MAIN_BUTTON_TOP_Y} ${MAIN_BUTTON_Z}`,
+    `-${MAIN_BUTTON_X_OFFSET} ${MAIN_BUTTON_BOTTOM_Y} ${MAIN_BUTTON_Z}`,
+    `${MAIN_BUTTON_X_OFFSET} ${MAIN_BUTTON_BOTTOM_Y} ${MAIN_BUTTON_Z}`
+  ];
+
+  const CORNER_BUTTON_Z = MAIN_BUTTON_Z;   // same depth/logic as main buttons
+  const CORNER_BUTTON_TOP_Y = 2.0;         // top row of corner buttons (above main buttons)
+  const CORNER_BUTTON_BOTTOM_Y = 1.6;      // 2nd row, only used when a scene has 4 corner buttons
+  const CORNER_BUTTON_X_OFFSET = 1.1;      // left/right spread of corner buttons
+  const CORNER_BUTTON_WIDTH = 1.0;
+  const CORNER_BUTTON_HEIGHT = 0.34;
+
+  const CORNER_BUTTON_POSITIONS_4 = [
+    `-${CORNER_BUTTON_X_OFFSET} ${CORNER_BUTTON_TOP_Y} ${CORNER_BUTTON_Z}`,
+    `${CORNER_BUTTON_X_OFFSET} ${CORNER_BUTTON_TOP_Y} ${CORNER_BUTTON_Z}`,
+    `-${CORNER_BUTTON_X_OFFSET} ${CORNER_BUTTON_BOTTOM_Y} ${CORNER_BUTTON_Z}`,
+    `${CORNER_BUTTON_X_OFFSET} ${CORNER_BUTTON_BOTTOM_Y} ${CORNER_BUTTON_Z}`
+  ];
+  // Used on phobia pages (single "Home" button) and calm scenes (single
+  // "Back to ..." button) — placed top-right, level with the top corner row.
+  const CORNER_BUTTON_POSITION_SINGLE = `${CORNER_BUTTON_X_OFFSET} ${CORNER_BUTTON_TOP_Y} ${CORNER_BUTTON_Z}`;
+
+  const GAZE_TIME_MS = 1400;
+
+  /* ========================================================================
+   * CONTENT DATA — phobia names, colors, and info text.
+   * (media addresses live in SCENE_MEDIA above, not here)
+   * ====================================================================== */
   const PHOBIAS = {
     arachnophobia: {
       id: 'arachnophobia',
       name: 'Arachnophobia',
       color: '#ff6b6b',
       info: 'TODO: short description of this phobia pathway.',
-      mild:  { id: 'arachnophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
-      harsh: { id: 'arachnophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      mild:  { id: 'arachnophobia-mild',  name: 'Mild scene' },
+      harsh: { id: 'arachnophobia-harsh', name: 'Harsh scene' },
       calm1: 'calm-garden',
       calm2: 'beach-retreat'
     },
@@ -113,8 +235,8 @@
       name: 'Acrophobia',
       color: '#ff9f43',
       info: 'TODO: short description of this phobia pathway.',
-      mild:  { id: 'acrophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
-      harsh: { id: 'acrophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      mild:  { id: 'acrophobia-mild',  name: 'Mild scene' },
+      harsh: { id: 'acrophobia-harsh', name: 'Harsh scene' },
       calm1: 'calm-garden',
       calm2: 'beach-retreat'
     },
@@ -123,8 +245,8 @@
       name: 'Claustrophobia',
       color: '#6bcb77',
       info: 'TODO: short description of this phobia pathway.',
-      mild:  { id: 'claustrophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
-      harsh: { id: 'claustrophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      mild:  { id: 'claustrophobia-mild',  name: 'Mild scene' },
+      harsh: { id: 'claustrophobia-harsh', name: 'Harsh scene' },
       calm1: 'calm-garden',
       calm2: 'beach-retreat'
     },
@@ -133,8 +255,8 @@
       name: 'Ophidiophobia',
       color: '#a29bfe',
       info: 'TODO: short description of this phobia pathway.',
-      mild:  { id: 'ophidiophobia-mild',  name: 'Mild scene',  type: 'image', asset: 'sampleImg' },
-      harsh: { id: 'ophidiophobia-harsh', name: 'Harsh scene', type: 'video', asset: 'sampleVideo' },
+      mild:  { id: 'ophidiophobia-mild',  name: 'Mild scene' },
+      harsh: { id: 'ophidiophobia-harsh', name: 'Harsh scene' },
       calm1: 'calm-garden',
       calm2: 'beach-retreat'
     }
@@ -144,24 +266,16 @@
     'calm-garden': {
       id: 'calm-garden',
       name: 'Calm Garden',
-      type: 'image',
-      asset: 'sampleImg',
       info: 'TODO: short description of this calming place.'
     },
     'beach-retreat': {
       id: 'beach-retreat',
       name: 'Beach Retreat',
-      type: 'image',
-      asset: 'sampleImg',
       info: 'TODO: short description of this calming place.'
     }
   };
 
   const PHOBIA_ORDER = ['arachnophobia', 'acrophobia', 'claustrophobia', 'ophidiophobia'];
-  const GAZE_TIME_MS = 1400;
-
-  // Cross-layout for the 4 big "in-scene" buttons (home page + phobia page).
-  const MAIN_BUTTON_POSITIONS = ['-1.6 1.0 -2.2', '1.6 1.0 -2.2', '-1.6 -0.2 -2.2', '1.6 -0.2 -2.2'];
 
   /* ======================================================================
    * DOM / A-FRAME REFERENCES
@@ -169,9 +283,10 @@
 
   const sky = document.getElementById('sky');
   const videoSphere = document.getElementById('videoSphere');
+  const activeVideo = document.getElementById('activeVideo');
+  const sceneMusic = document.getElementById('sceneMusic');
   const hotspotContainer = document.getElementById('hotspot-container');
   const cornerContainer = document.getElementById('corner-container');
-  const cameraRig = document.getElementById('cameraRig');
   const gazeLoader = document.getElementById('gazeLoader');
   const sceneLabel = document.getElementById('scene-label');
 
@@ -183,34 +298,53 @@
   let gazeState = { active: false, start: 0, raf: null, onComplete: null };
 
   /* ======================================================================
-   * BACKGROUND (image sky vs 360 video) HELPERS
+   * BACKGROUND (image sky vs 360 video) + MUSIC HELPERS
    * ==================================================================== */
 
-  function pauseAllVideoAssets() {
-    document.querySelectorAll('a-assets video').forEach((videoEl) => {
-      if (typeof videoEl.pause === 'function') videoEl.pause();
+  function stopSceneMusic() {
+    sceneMusic.pause();
+  }
+
+  function startSceneMusic(src) {
+    if (!src) return;
+    if (sceneMusic.getAttribute('src') !== src) {
+      sceneMusic.setAttribute('src', src);
+    }
+    sceneMusic.currentTime = 0;
+    sceneMusic.play().catch(() => {
+      // Autoplay-with-sound can still be blocked by the browser on the
+      // very first scene shown automatically on load (no user gesture
+      // yet). Every later call happens inside a button click, which
+      // counts as a user gesture and should play normally.
     });
   }
 
-  function setBackgroundFromScene(scene) {
-    pauseAllVideoAssets();
+  // mediaEntry: { src, music? } — src's extension decides image vs video.
+  function setBackgroundFromScene(mediaEntry) {
+    stopSceneMusic();
+    activeVideo.pause();
 
-    if (scene && scene.type === 'video') {
+    if (mediaEntry && isVideoSrc(mediaEntry.src)) {
       sky.setAttribute('visible', 'false');
-      videoSphere.setAttribute('src', `#${scene.asset}`);
-      videoSphere.setAttribute('visible', 'true');
-      const videoEl = document.getElementById(scene.asset);
-      if (videoEl && typeof videoEl.play === 'function') {
-        videoEl.muted = true; // autoplay reliability; unmute in real content once tested
-        videoEl.play().catch(() => {});
+      if (activeVideo.getAttribute('src') !== mediaEntry.src) {
+        activeVideo.setAttribute('src', mediaEntry.src);
       }
+      videoSphere.setAttribute('src', '#activeVideo');
+      videoSphere.setAttribute('visible', 'true');
+      activeVideo.muted = true; // autoplay reliability; unmute once you've tested your real footage
+      activeVideo.currentTime = 0;
+      activeVideo.play().catch(() => {});
       return;
     }
 
     videoSphere.setAttribute('visible', 'false');
-    const assetId = scene ? scene.asset : 'sampleImg';
-    sky.setAttribute('src', `#${assetId}`);
+    const assetSrc = mediaEntry ? mediaEntry.src : HOME_BACKGROUND_IMAGE;
+    sky.setAttribute('src', assetSrc);
     sky.setAttribute('visible', 'true');
+
+    if (mediaEntry && mediaEntry.music) {
+      startSceneMusic(mediaEntry.music);
+    }
   }
 
   /* ======================================================================
@@ -293,16 +427,17 @@
 
   /* ======================================================================
    * BUTTON FACTORIES
-   *  - makeMainButton: big 3D object placed inside the 360 scene itself.
-   *  - makeCornerButton: small persistent nav button anchored near the rig.
+   *  - makeMainButton: big 3D object placed inside the current 360 scene.
+   *  - makeCornerButton: small persistent nav button, same in-scene
+   *    placement logic, positioned higher (see CORNER_BUTTON_* settings).
    * Both work with mouse click, touch tap, AND VR gaze-dwell.
    * ==================================================================== */
 
   function wireInteractions(bg, onClick) {
     bg.classList.add('clickable');
     const trigger = () => { if (typeof onClick === 'function') onClick(); };
-    bg.addEventListener('click', trigger);           // mouse + touch tap
-    bg.addEventListener('mouseenter', () => startGaze(trigger)); // gaze dwell
+    bg.addEventListener('click', trigger);                       // mouse + touch tap
+    bg.addEventListener('mouseenter', () => startGaze(trigger));  // gaze dwell
     bg.addEventListener('mouseleave', cancelGaze);
     return trigger;
   }
@@ -313,13 +448,13 @@
     wrapper.setAttribute('position', position);
 
     const bg = document.createElement('a-plane');
-    bg.setAttribute('width', '1.5');
-    bg.setAttribute('height', '0.42');
+    bg.setAttribute('width', String(MAIN_BUTTON_WIDTH));
+    bg.setAttribute('height', String(MAIN_BUTTON_HEIGHT));
     bg.setAttribute('material', `color: ${color}; opacity: 0.92; shader: flat; side: double`);
 
     const text = document.createElement('a-entity');
     text.setAttribute('position', '0 0 0.02');
-    text.setAttribute('text', `value:${label}; align:center; width:1.3; color:#fff; wrapCount:16; shader:msdf`);
+    text.setAttribute('text', `value:${label}; align:center; width:${MAIN_BUTTON_WIDTH * 0.85}; color:#fff; wrapCount:16; shader:msdf`);
 
     wireInteractions(bg, onClick);
     wrapper.appendChild(bg);
@@ -328,22 +463,19 @@
     return wrapper;
   }
 
-  // position here is in "corner-container" local space, i.e. fixed near
-  // the rig's starting orientation — see docs/DEVELOPER.md for why these
-  // are NOT attached to the camera object itself.
-  function makeCornerButton({ id, label, position, color = '#1976d2', width = 0.62, height = 0.2, onClick }) {
+  function makeCornerButton({ id, label, position, color = '#1976d2', onClick }) {
     const wrapper = document.createElement('a-entity');
     wrapper.setAttribute('id', id);
     wrapper.setAttribute('position', position);
 
     const bg = document.createElement('a-plane');
-    bg.setAttribute('width', String(width));
-    bg.setAttribute('height', String(height));
+    bg.setAttribute('width', String(CORNER_BUTTON_WIDTH));
+    bg.setAttribute('height', String(CORNER_BUTTON_HEIGHT));
     bg.setAttribute('material', `color: ${color}; opacity: 0.95; shader: flat; side: double`);
 
     const text = document.createElement('a-entity');
     text.setAttribute('position', '0 0 0.02');
-    text.setAttribute('text', `value:${label}; align:center; width:${width * 0.9}; color:#fff; wrapCount:14; shader:msdf`);
+    text.setAttribute('text', `value:${label}; align:center; width:${CORNER_BUTTON_WIDTH * 0.85}; color:#fff; wrapCount:14; shader:msdf`);
 
     wireInteractions(bg, onClick);
     wrapper.appendChild(bg);
@@ -362,15 +494,15 @@
     sceneLabel.textContent = 'Home';
     clearHotspots();
     clearCornerButtons();
-    setBackgroundFromScene({ type: 'image', asset: 'sampleImg' });
+    setBackgroundFromScene({ src: HOME_BACKGROUND_IMAGE });
 
     hotspotContainer.appendChild(addTextBlock({
-      x: 0, y: 2.15, z: -2.8, width: 2.4,
+      x: 0, y: 2.6, z: -2.8, width: 2.4,
       text: 'VR Exposure Therapy\nChoose a phobia to begin'
     }));
 
     hotspotContainer.appendChild(addTextBlock({
-      x: 0, y: 1.55, z: -2.7, width: 2.0, color: '#dfeaff',
+      x: 0, y: 2.05, z: -2.7, width: 2.0, color: '#dfeaff',
       text: 'TODO: project description for participants goes here.'
     }));
 
@@ -395,16 +527,16 @@
     sceneLabel.textContent = `${phobia.name} — overview`;
     clearHotspots();
     clearCornerButtons();
-    setBackgroundFromScene({ type: 'image', asset: 'sampleImg' });
+    setBackgroundFromScene({ src: PHOBIA_PAGE_BACKGROUND_IMAGE });
 
     hotspotContainer.appendChild(addTextBlock({
-      x: 0, y: 2.15, z: -2.8, width: 2.4,
+      x: 0, y: 2.6, z: -2.8, width: 2.4,
       text: `${phobia.name}\n${phobia.info}`
     }));
 
     const actions = [
-      { label: phobia.mild.name,  color: phobia.color,   onClick: () => renderPhobiaScene(phobiaId, 'mild') },
-      { label: phobia.harsh.name, color: '#d62839',       onClick: () => renderPhobiaScene(phobiaId, 'harsh') },
+      { label: phobia.mild.name,  color: phobia.color, onClick: () => renderPhobiaScene(phobiaId, 'mild') },
+      { label: phobia.harsh.name, color: '#d62839',     onClick: () => renderPhobiaScene(phobiaId, 'harsh') },
       { label: CALM_PLACES[phobia.calm1].name, color: '#74b9ff', onClick: () => renderCalmScene(phobia.calm1, phobiaId) },
       { label: CALM_PLACES[phobia.calm2].name, color: '#55efc4', onClick: () => renderCalmScene(phobia.calm2, phobiaId) }
     ];
@@ -423,9 +555,8 @@
     makeCornerButton({
       id: `${phobiaId}-home-corner`,
       label: 'Home',
-      position: '-1.0 -0.6 -1.3',
+      position: CORNER_BUTTON_POSITION_SINGLE,
       color: '#ffffff',
-      width: 0.5, height: 0.18,
       onClick: renderHome
     });
   }
@@ -441,40 +572,40 @@
     sceneLabel.textContent = `${phobia.name} — ${sceneData.name}`;
     clearHotspots();
     clearCornerButtons();
-    setBackgroundFromScene(sceneData);
+    setBackgroundFromScene(SCENE_MEDIA[sceneData.id]);
 
     hotspotContainer.appendChild(addTextBlock({
-      x: 0, y: 2.0, z: -2.7, width: 2.0,
+      x: 0, y: 2.5, z: -2.7, width: 2.0,
       text: `${phobia.name}\n${sceneData.name}`
     }));
 
     // Requirement: 4 little side buttons — home, this phobia's page,
-    // calm place 1, calm place 2. Arranged as two bottom corners.
+    // calm place 1, calm place 2.
     makeCornerButton({
       id: `${sceneData.id}-home`,
       label: 'Home',
-      position: '-1.3 -0.65 -1.3',
+      position: CORNER_BUTTON_POSITIONS_4[0],
       color: '#ffffff',
       onClick: renderHome
     });
     makeCornerButton({
       id: `${sceneData.id}-phobia-page`,
       label: phobia.name,
-      position: '-1.3 -0.95 -1.3',
+      position: CORNER_BUTTON_POSITIONS_4[1],
       color: '#1976d2',
       onClick: () => renderPhobiaPage(phobiaId)
     });
     makeCornerButton({
       id: `${sceneData.id}-calm-1`,
       label: CALM_PLACES[phobia.calm1].name,
-      position: '1.3 -0.65 -1.3',
+      position: CORNER_BUTTON_POSITIONS_4[2],
       color: '#74b9ff',
       onClick: () => renderCalmScene(phobia.calm1, phobiaId)
     });
     makeCornerButton({
       id: `${sceneData.id}-calm-2`,
       label: CALM_PLACES[phobia.calm2].name,
-      position: '1.3 -0.95 -1.3',
+      position: CORNER_BUTTON_POSITIONS_4[3],
       color: '#55efc4',
       onClick: () => renderCalmScene(phobia.calm2, phobiaId)
     });
@@ -490,10 +621,10 @@
     sceneLabel.textContent = calm.name;
     clearHotspots();
     clearCornerButtons();
-    setBackgroundFromScene(calm);
+    setBackgroundFromScene(SCENE_MEDIA[calm.id]);
 
     hotspotContainer.appendChild(addTextBlock({
-      x: 0, y: 2.0, z: -2.7, width: 2.0,
+      x: 0, y: 2.5, z: -2.7, width: 2.0,
       text: `${calm.name}\n${calm.info}`
     }));
 
@@ -503,9 +634,8 @@
     makeCornerButton({
       id: `${calm.id}-return-phobia`,
       label: `Back to ${phobiaName}`,
-      position: '0 -0.8 -1.3',
+      position: CORNER_BUTTON_POSITION_SINGLE,
       color: '#ffffff',
-      width: 0.9, height: 0.2,
       onClick: () => renderPhobiaPage(returnPhobiaId)
     });
   }
@@ -515,9 +645,9 @@
    *
    * Disabled by default. Most mobile browsers never fire these key
    * events for volume buttons at all (the OS reserves them for system
-   * volume). This is left here only in case you want to try it on a
-   * specific device/browser combo during testing; do not rely on it.
-   * See docs/DEVELOPER.md for details.
+   * volume). Left here only in case you want to try it on a specific
+   * device/browser combo during testing; do not rely on it. See
+   * docs/DEVELOPER.md for details.
    * ==================================================================== */
   const ENABLE_EXPERIMENTAL_VOLUME_KEYS = false;
 
