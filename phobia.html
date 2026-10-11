@@ -23,9 +23,8 @@
 </head>
 <body>
   <div id="help-top">
-    Desktop: click a button. Phone: tap a button.<br />
-    VR headset (no controller): the black dot is where you're looking —
-    rest it on a button and hold still; a ring fills up, then it activates.
+    Desktop: Click a button. Phone: Tap a button.<br />
+    VR headset: Just Gaze at a button.
   </div>
   <div id="scene-label"></div>
 
@@ -335,8 +334,11 @@
   const sceneMusic = document.getElementById('sceneMusic');
   const hotspotContainer = document.getElementById('hotspot-container');
   const cornerContainer = document.getElementById('corner-container');
+  const sceneAssets = document.querySelector('a-assets');
   const gazeLoader = document.getElementById('gazeLoader');
   const sceneLabel = document.getElementById('scene-label');
+  const generatedTextCanvases = new Set();
+  let textCanvasSequence = 0;
 
   const state = {
     activeScene: 'home',
@@ -415,14 +417,61 @@
     while (cornerContainer.firstChild) cornerContainer.removeChild(cornerContainer.firstChild);
   }
 
+  function clearSceneUI() {
+    clearHotspots();
+    clearCornerButtons();
+    generatedTextCanvases.forEach((canvas) => canvas.remove());
+    generatedTextCanvases.clear();
+  }
+
   /* ======================================================================
    * TEXT PANEL HELPER
    * ==================================================================== */
 
-  function addTextBlock({ x = 0, y = 0, z = -2.4, width = 1.8, color = '#fff', text }) {
+  function makeCanvasText({ text, width, color = '#fff', fontSize = 64 }) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    const context = canvas.getContext('2d');
+    context.font = `600 ${fontSize}px Arial, sans-serif`;
+
+    const lines = [];
+    String(text).split('\n').forEach((paragraph) => {
+      let line = '';
+      paragraph.split(/\s+/).forEach((word) => {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && context.measureText(candidate).width > canvas.width - 48) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
+      });
+      lines.push(line);
+    });
+
+    const lineHeight = fontSize * 1.25;
+    canvas.height = Math.max(lineHeight, lines.length * lineHeight + 24);
+    context.font = `600 ${fontSize}px Arial, sans-serif`;
+    context.fillStyle = color;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    lines.forEach((line, index) => {
+      context.fillText(line, canvas.width / 2, 12 + (index + 0.5) * lineHeight, canvas.width - 48);
+    });
+
+    canvas.id = `local-text-${++textCanvasSequence}`;
+    sceneAssets.appendChild(canvas);
+    generatedTextCanvases.add(canvas);
+
     const entity = document.createElement('a-entity');
+    entity.setAttribute('geometry', `primitive: plane; width: ${width}; height: ${width * canvas.height / canvas.width}`);
+    entity.setAttribute('material', `shader: flat; src: #${canvas.id}; transparent: true; side: double`);
+    return entity;
+  }
+
+  function addTextBlock({ x = 0, y = 0, z = -2.4, width = 1.8, color = '#fff', text }) {
+    const entity = makeCanvasText({ text, width, color });
     entity.setAttribute('position', `${x} ${y} ${z}`);
-    entity.setAttribute('text', `value:${text}; width:${width}; align:center; color:${color}; wrapCount:30; shader:msdf`);
     return entity;
   }
 
@@ -522,9 +571,8 @@
       color, opacity: MAIN_BUTTON_OPACITY
     });
 
-    const text = document.createElement('a-entity');
+    const text = makeCanvasText({ text: label, width: MAIN_BUTTON_WIDTH * 0.75, fontSize: 104 });
     text.setAttribute('position', '0 0 0.02');
-    text.setAttribute('text', `value:${label}; align:center; width:${MAIN_BUTTON_WIDTH * 0.75}; color:#fff; wrapCount:16; shader:msdf`);
 
     wireInteractions(bg, onClick);
     wrapper.appendChild(bg);
@@ -544,9 +592,8 @@
       color, opacity: CORNER_BUTTON_OPACITY
     });
 
-    const text = document.createElement('a-entity');
+    const text = makeCanvasText({ text: label, width: CORNER_BUTTON_WIDTH * 0.7, fontSize: 88 });
     text.setAttribute('position', '0 0 0.02');
-    text.setAttribute('text', `value:${label}; align:center; width:${CORNER_BUTTON_WIDTH * 0.7}; color:#fff; wrapCount:14; shader:msdf`);
 
     wireInteractions(bg, onClick);
     wrapper.appendChild(bg);
@@ -604,8 +651,7 @@
     state.activeScene = 'home';
     state.returnToPhobia = null;
     sceneLabel.textContent = 'Home';
-    clearHotspots();
-    clearCornerButtons();
+    clearSceneUI();
     setBackgroundFromScene({ src: HOME_BACKGROUND_IMAGE });
 
     hotspotContainer.appendChild(addTextBlock({
@@ -637,8 +683,7 @@
 
     state.activeScene = `phobia-page:${phobiaId}`;
     sceneLabel.textContent = `${phobia.name} — overview`;
-    clearHotspots();
-    clearCornerButtons();
+    clearSceneUI();
     setBackgroundFromScene({ src: PHOBIA_PAGE_BACKGROUND_IMAGE });
 
     hotspotContainer.appendChild(addTextBlock({
@@ -684,8 +729,7 @@
     state.activeScene = sceneData.id;
     state.returnToPhobia = phobiaId;
     sceneLabel.textContent = `${phobia.name} — ${sceneData.name}`;
-    clearHotspots();
-    clearCornerButtons();
+    clearSceneUI();
     setBackgroundFromScene(media);
 
     hotspotContainer.appendChild(addTextBlock({
@@ -742,8 +786,7 @@
     state.activeScene = calm.id;
     state.returnToPhobia = returnPhobiaId;
     sceneLabel.textContent = calm.name;
-    clearHotspots();
-    clearCornerButtons();
+    clearSceneUI();
     setBackgroundFromScene(media);
 
     hotspotContainer.appendChild(addTextBlock({
